@@ -1,0 +1,7 @@
+# CPU 环境依赖（NPU 环境勿用本文件安装，容器内已有 torch_npu，只补缺失包，见 README）
+torch>=2.2
+sentence-transformers>=6.0
+transformers>=5.0
+fastapi>=0.110
+uvicorn>=0.29
+numpy>=1.24

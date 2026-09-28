@@ -1,0 +1,15 @@
+# NPU 生产 embedding 服务镜像：基于 vllm-ascend 官方镜像（CANN/torch/torch_npu 自带且版本配对）
+# 构建命令: docker build -f Dockerfile.npu --build-arg BASE_IMAGE=<DeepSeek同款镜像tag> -t embedding-npu:latest .
+ARG BASE_IMAGE=quay.io/ascend/vllm-ascend:v0.23.0
+FROM ${BASE_IMAGE}
+
+# 只补齐 sentence-transformers 及其缺的依赖（scikit-learn/scipy）。
+# torch/torch_npu/transformers/fastapi/uvicorn 镜像已自带——sentence-transformers 对它们的
+# 版本约束很宽，pip 不会触发升级，装完后必须回归验证 torch_npu 配对（见 service-npu.sh check）。
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    sentence-transformers scikit-learn scipy
+
+WORKDIR /root/embedding-service
+ENV EMBEDDING_DEVICE=npu
+EXPOSE 8001
+CMD ["python", "/root/embedding-service/server.py"]

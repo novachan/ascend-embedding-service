@@ -1,0 +1,25 @@
+# ===== 运行时产物 =====
+server.log
+server.pid
+*.log
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ===== 本地开发虚拟环境（CPU 版调试用；生产部署在容器内，不需要）=====
+.venv/
+
+# ===== 模型权重（1.2GB，禁止入库；从 ModelScope/HuggingFace 下载，见 README）=====
+models/
+
+# ===== IDE =====
+.idea/
+.vscode/
+
+# ===== 离线 wheel（11MB aarch64 二进制）
+# 默认不入库：离线环境用 README「模型与依赖下载」一节的命令自行生成，
+# 或直接使用完整交付包 embedding-service-npu.tar.gz（内含）。
+# 若希望仓库开箱即含离线包，删除下面一行即可。
+wheels/

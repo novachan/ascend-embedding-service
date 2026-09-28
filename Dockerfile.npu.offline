@@ -1,0 +1,21 @@
+# NPU 生产 embedding 服务镜像【离线构建版】：在目标机器上直接 build，全程无需外网
+#
+# 前置（都在生产机本地即可）：
+#   1) BASE_IMAGE 已存在于本地镜像列表（DeepSeek 同款 vllm-ascend 镜像，docker images 可见）
+#   2) wheels/ 目录已放好离线 whl 包（有网机器上用 pip download 下载，见 service-npu.sh 头部说明）
+#
+# 构建命令: docker build -f Dockerfile.npu.offline --build-arg BASE_IMAGE=<DeepSeek同款镜像tag> -t embedding-npu:latest .
+ARG BASE_IMAGE=quay.io/ascend/vllm-ascend:v0.23.0
+FROM ${BASE_IMAGE}
+
+# 离线安装：--no-index 保证 pip 只碰本地 wheels，绝不会联网、也绝不会
+# 动镜像里已有的 torch/transformers（已有版本满足依赖时 pip 直接跳过）
+COPY wheels /tmp/wheels
+RUN pip install --no-index --find-links=/tmp/wheels \
+    sentence-transformers scikit-learn scipy \
+    && rm -rf /tmp/wheels
+
+WORKDIR /root/embedding-service
+ENV EMBEDDING_DEVICE=npu
+EXPOSE 8001
+CMD ["python", "/root/embedding-service/server.py"]
