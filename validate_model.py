@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 """Qwen3-Embedding-0.6B 模型验证脚本：维度断言 + 语义相似度断言 + MRL 截断验证"""
+import os
+
 import torch
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim
 
-MODEL_PATH = "/root/embedding-service/models/Qwen3-Embedding-0.6B"
+# 模型目录默认跟随脚本所在位置，与 server.py 保持一致，可用环境变量覆盖
+_DEFAULT_MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "Qwen3-Embedding-0.6B")
+MODEL_PATH = os.environ.get("EMBEDDING_MODEL_PATH", _DEFAULT_MODEL_DIR)
 
 model = SentenceTransformer(MODEL_PATH, device="cpu")
 print(f"模型加载成功 | 最大序列长度: {model.max_seq_length} | 向量维度: {model.get_sentence_embedding_dimension()}")
