@@ -1,4 +1,4 @@
-# qwen3-embedding-ascend
+# ascend-embedding-service
 
 **昇腾 NPU 空闲显存离线 Embedding 服务**：复用 [vllm-ascend](https://quay.io/repository/ascend/vllm-ascend) 官方容器镜像的 CANN/torch_npu 环境，借用 NPU 空闲显存运行 [Qwen3-Embedding-0.6B](https://www.modelscope.cn/models/Qwen/Qwen3-Embedding-0.6B)，提供开箱即用的 OpenAI 兼容 `/v1/embeddings` 接口。**不依赖 vLLM 推理引擎**，专为「大模型主服务与 embedding 共卡部署、生产环境不通外网」场景设计。
 
