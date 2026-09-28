@@ -18,8 +18,6 @@ models/
 .idea/
 .vscode/
 
-# ===== 离线 wheel（11MB aarch64 二进制）
-# 默认不入库：离线环境用 README「模型与依赖下载」一节的命令自行生成，
-# 或直接使用完整交付包 embedding-service-npu.tar.gz（内含）。
-# 若希望仓库开箱即含离线包，删除下面一行即可。
-wheels/
+# ===== 离线 wheel（11MB aarch64 二进制）=====
+# 已入库：clone 即含离线依赖包，NPU 容器内 --no-index 安装开箱即用。
+# wheels/

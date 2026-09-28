@@ -37,9 +37,59 @@ vllm 0.20.2+empty  vllm_ascend 0.20.2rc1  transformers 5.5.3
 fastapi 0.123.10  uvicorn 0.46.0  numpy 1.26.4  scipy 1.13.1
 ```
 
+## 获取服务（两种方式）
+
+| | 方式 A：Release 完整包（推荐） | 方式 B：clone 源码 |
+|---|---|---|
+| 内容 | **模型（1.2GB）+ wheels + 全部脚本**，开箱即用 | 代码 + wheels（**不含模型**） |
+| 适用 | NPU 生产离线部署、快速试用 | 二次开发、CPU 本地调试 |
+| 获取 | [GitHub Releases](../../releases) 下载 `embedding-service-npu.tar.gz` | `git clone` 本仓库 |
+
+> Release 包不进 git 历史，仓库克隆保持轻量；单文件 916MB 在 GitHub Release 2GB 限额内。
+
+### 模型获取说明（CPU 和 NPU 都需要模型，差异只在方式）
+
+| 场景 | 获取方式 |
+|---|---|
+| CPU 本地（通网） | 在线下载（二选一）：`modelscope download --model Qwen/Qwen3-Embedding-0.6B --local_dir models/Qwen3-Embedding-0.6B`，或 `huggingface-cli download Qwen/Qwen3-Embedding-0.6B --local_dir models/Qwen3-Embedding-0.6B` |
+| NPU 生产（离线） | ① **Release 完整包已含模型**，解压即用（推荐）；② 或在有网机器下载后 `scp` 到生产机数据目录 |
+
+## 目录结构
+
+```
+├── server.py               # 服务主体：FastAPI + uvicorn(http="h11")，CPU/NPU 双模式（约 120 行）
+├── docker-create.sh        # NPU 宿主机：启动 vllm-ascend 镜像容器（设备/驱动挂载）
+├── install-and-start.sh    # NPU 容器内：离线装依赖 → 校验 torch_npu → 启动 → 健康检查（幂等）
+├── validate_model.py       # 模型验证：1024 维 / 语义相似度 / MRL 截断 / 归一化 四断言
+├── service.sh              # 本地 CPU：start/stop/status 管理脚本
+├── requirements.txt        # 本地 CPU 依赖（NPU 用容器环境 + wheels/，勿在 NPU 容器安装）
+├── wheels/                 # NPU 离线依赖包（cp311/aarch64，5 个）
+├── Dockerfile.npu(.offline)  # 备选：自制镜像方案（在线/离线构建）
+├── service-npu.sh          # 备选：自制镜像方案的管理脚本
+└── models/                 # 模型权重（1.2GB，不入库；获取方式见「模型获取说明」）
+```
+
+## 本地 CPU 快速开始
+
+```bash
+# 1. 获取模型（见上方「模型获取说明」，通网机器在线下载）
+pip install modelscope
+modelscope download --model Qwen/Qwen3-Embedding-0.6B --local_dir models/Qwen3-Embedding-0.6B
+
+# 2. 装依赖（CPU 版 torch 即可；NPU 容器用 wheels/ 离线安装，勿执行本步）
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+
+# 3. 验证模型（四断言：1024 维 / 语义相似度 / MRL 截断 / 归一化）
+python validate_model.py
+
+# 4. 启动（默认 cpu + 8000 端口）
+./service.sh start && ./service.sh status
+```
+
 ## NPU 部署（三步）
 
-前置：宿主机已装昇腾驱动（`npu-smi info` 可用）、已拉取上方镜像、模型已下载到数据目录。
+前置：宿主机已装昇腾驱动（`npu-smi info` 可用）、已拉取基础镜像、已通过上方「获取服务」拿到**完整包**（Release 方式 A）或将源码与模型放到数据目录。
 
 ### ① 启动容器（生产实测命令）
 
@@ -80,6 +130,8 @@ cd /root/embedding-service
 CARD_ID=0 ./install-and-start.sh
 ```
 
+> Release 完整包解压后即为此目录结构（`/data/qwen3-embeding/embedding-service/`，挂载为容器 `/root/embedding-service`）。若用方式 B clone，则把仓库内容与模型目录放到数据目录下。
+
 脚本自动完成：离线安装缺失依赖（`pip install --no-index --find-links=wheels`，已有包一律不动）→ 校验 torch_npu 配对（打印 `npu可用: True`）→ 以 `EMBEDDING_DEVICE=npu` + float16 启动 → 60 秒健康轮询。管理：`./install-and-start.sh stop|status`，日志 `tail -f server.log`。容器重建后重跑即可（幂等）。
 
 ### ③ 验证
@@ -95,24 +147,6 @@ npu-smi info   # 目标卡显存上涨约 1.2GB
 ```
 
 调用方接入地址：`http://<宿主机IP>:8090/v1/embeddings`（容器 8001 已映射宿主机 8090）。
-
-## 本地 CPU 快速开始
-
-```bash
-# 1. 下载模型
-pip install modelscope
-modelscope download --model Qwen/Qwen3-Embedding-0.6B --local_dir models/Qwen3-Embedding-0.6B
-
-# 2. 装依赖（CPU 版 torch 即可；NPU 容器勿用 requirements.txt，见上）
-python -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
-
-# 3. 验证模型（四断言：1024 维 / 语义相似度 / MRL 截断 / 归一化）
-python validate_model.py
-
-# 4. 启动（默认 cpu + 8000 端口）
-./service.sh start && ./service.sh status
-```
 
 ## API
 
@@ -148,15 +182,6 @@ curl http://127.0.0.1:8000/v1/embeddings \
 
 固定常量（`server.py`）：单批上限 128 条，MRL 维度范围 32~1024。
 
-## 模型下载
-
-```bash
-# ModelScope（国内推荐）
-modelscope download --model Qwen/Qwen3-Embedding-0.6B --local_dir models/Qwen3-Embedding-0.6B
-# HuggingFace
-huggingface-cli download Qwen/Qwen3-Embedding-0.6B --local_dir models/Qwen3-Embedding-0.6B
-```
-
 ## FAQ
 
 **Q: Java 服务调用报 422 `{"loc":["body"],"msg":"Field required"}`？**
@@ -171,21 +196,8 @@ A: fp16 权重约 1.2GB，建议目标卡空闲 ≥2.5GB；`npu-smi info` 选剩
 **Q: 容器重建后服务没了？**
 A: pip 安装在容器可写层，重建后重跑 `CARD_ID=x ./install-and-start.sh` 即可（幂等）。
 
-## 目录结构
-
-```
-├── server.py               # 服务主体：FastAPI + uvicorn(http="h11")，CPU/NPU 双模式（约 120 行）
-├── docker-create.sh        # NPU 宿主机：启动 vllm-ascend 镜像容器（设备/驱动挂载）
-├── install-and-start.sh    # NPU 容器内：离线装依赖 → 校验 torch_npu → 启动 → 健康检查（幂等）
-├── validate_model.py       # 模型验证：1024 维 / 语义相似度 / MRL 截断 / 归一化 四断言
-├── service.sh              # 本地 CPU：start/stop/status 管理脚本
-├── requirements.txt        # 本地 CPU 依赖（NPU 用容器环境 + wheels/，勿在 NPU 容器安装）
-├── wheels/                 # NPU 离线依赖包（cp311/aarch64，5 个）
-├── Dockerfile.npu(.offline)  # 备选：自制镜像方案（在线/离线构建）
-├── service-npu.sh          # 备选：自制镜像方案的管理脚本
-└── models/                 # 模型权重（不入库，见下载方式）
-```
-
 ## License
+
+MIT。模型权重遵循 [Qwen3 官方许可](https://www.modelscope.cn/models/Qwen/Qwen3-Embedding-0.6B)。
 
 MIT。模型权重遵循 [Qwen3 官方许可](https://www.modelscope.cn/models/Qwen/Qwen3-Embedding-0.6B)。
